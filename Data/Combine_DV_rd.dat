@@ -1,0 +1,4 @@
+# z_eff  DV/rd  DV/rd_err  # Data extracted from provided table
+0.106  3.06   0.14    # 6dFGS
+0.15   4.47   0.16    # SDSS DR7 MGS
+0.295  7.944  0.075   # DESI DR2 BGS
