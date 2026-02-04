@@ -1,6 +1,0 @@
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / "data"
-OUTPUT_DIR = ROOT / "output"
-FIG_DIR = ROOT / "fig"
