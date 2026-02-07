@@ -111,9 +111,20 @@ def compute_eta_samples(DL_sn_samples, gp, z_eval, n_samples):
 ###############################################################################
 # 6. χ² test at BAO points
 ###############################################################################
-def eta_chi2(eta_bao, eta_bao_err):
-    chi2_val = np.sum((eta_bao - 1)**2 / eta_bao_err**2)
-    p_val = 1 - chi2.cdf(chi2_val, df=len(eta_bao))
+def eta_chi2(eta, cov, df=None):
+    """Calculate chi2 and p-value using full covariance matrix."""
+    diff = eta - 1.0
+    # Use full covariance inverse if cov is 2D, else use diagonal errors
+    if cov.ndim == 2:
+        inv_cov = np.linalg.inv(cov)
+        chi2_val = diff.T @ inv_cov @ diff
+    else:
+        chi2_val = np.sum(diff**2 / cov**2)
+    
+    # Degrees of freedom: N if testing consistency, N-1 if parameters were fitted
+    dof = df if df is not None else len(eta)
+    p_val = chi2.sf(chi2_val, dof) # sf = 1 - cdf, more accurate for small p
+    
     return chi2_val, p_val
 ###############################################################################
 
@@ -268,18 +279,27 @@ from scipy.optimize import minimize
 
 def kernel(x1, x2, p, name):
     d = np.abs(x1[:, None] - x2[None, :])
-    if name == 'SE':
+    if name == 'RBF':
         return p[0]**2 * np.exp(-0.5 * (d/p[1])**2)
     elif name == 'DSE':
+        if len(p) < 4:
+            return p[0]**2 * np.exp(-0.5 * (d/p[1])**2)
         return p[0]**2 * np.exp(-0.5 * (d/p[1])**2) + p[2]**2 * np.exp(-0.5 * (d/p[3])**2)
-    
-    nu_dict = {'Matern32': 1.5, 'Matern52': 2.5, 'Matern72': 3.5, 'Matern92': 4.5}
-    nu = nu_dict[name]
-    term = np.sqrt(2*nu) * d / p[1]
-    term[d==0] = 1e-8 
-    K = p[0]**2 * (2**(1-nu)/gamma(nu)) * term**nu * kv(nu, term)
-    np.fill_diagonal(K, p[0]**2)
-    return K
+    elif name == 'Dot':
+        return p[0]**2 * (x1[:, None] * x2[None, :])
+    elif name == 'RQ':
+        alpha = p[2]
+        return p[0]**2 * (1 + d**2/(2*alpha*p[1]**2))**(-alpha)
+    else:
+        nu_dict = {'Matern32':1.5,'Matern52':2.5,'Matern72':3.5,'Matern92':4.5}
+        nu = nu_dict[name]
+        term = np.sqrt(2*nu)*d/p[1]
+        term[d==0] = 1e-8
+        K = p[0]**2*(2**(1-nu)/gamma(nu))*term**nu*kv(nu,term)
+        np.fill_diagonal(K,p[0]**2)
+        return K
+
+
 
 def neg_log_likelihood(p, x, y, cov, name):
     K = kernel(x, x, p, name) + cov + np.eye(len(x))*1e-8
@@ -288,12 +308,23 @@ def neg_log_likelihood(p, x, y, cov, name):
     return 0.5 * y @ alpha + np.sum(np.log(np.diag(L)))
 
 def train_gp(x, y, cov, name):
-    p0 = [np.std(y), (np.max(x)-np.min(x))/2]
+    p0 = [np.std(y), (np.max(x) - np.min(x)) / 2]
     bounds = [(1e-2, 1000), (1e-2, 10)]
-    if name == 'DSE':
-        p0 += [np.std(y)/2, (np.max(x)-np.min(x))/10]
+    if name == 'RBF':
+        p0 += [np.std(y) / 2, (np.max(x) - np.min(x)) / 10]
         bounds += bounds
-    res = minimize(neg_log_likelihood, p0, args=(x, y, cov, name), bounds=bounds)
+    if name == 'RQ':
+        p0 += [1.0]
+        bounds += [(1e-2, 100)]
+    if name == 'Dot':
+        p0 = [np.std(y)]
+        bounds = [(1e-2, 1000)]
+    res = minimize(
+        neg_log_likelihood,
+        p0,
+        args=(x, y, cov, name),
+        bounds=bounds
+    )
     return res.x
 
 def get_reduced_chi2_samples(x, y, cov, name, n_samples=10000):
