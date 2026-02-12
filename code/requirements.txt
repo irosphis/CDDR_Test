@@ -1,9 +1,0 @@
-emcee
-matplotlib
-numpy
-scipy
-pandas
-astropy
-scikit-learn
-getdist
-corner
