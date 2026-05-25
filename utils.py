@@ -18,9 +18,6 @@ def inv(K, jitter=1e-10):
     Linv = np.linalg.solve(L, np.eye(K.shape[0]))
     return Linv.T @ Linv
 
-###############################################################################
-# 1.  mB(z) reconstruction utilities
-###############################################################################
 def evaluate_mB(z, mB_nodes, z_nodes):
     """Interpolate mB(z) using predefined node values."""
     interp = interp1d(np.log(z_nodes), mB_nodes, kind='linear', fill_value="extrapolate")
@@ -46,9 +43,6 @@ def ln_posterior(mB_nodes, z, m_obs, cov_inv, z_nodes):
     return lp + ln_likelihood(mB_nodes, z, m_obs, cov_inv, z_nodes)
 
 
-###############################################################################
-# 2. BAO: DV→DA→DL or DM→DA→DL
-###############################################################################
 def bao_DV_to_DL(z, DV_rd, DV_rd_err, H, H_err, rd, rd_err):
     """Convert DV/rd data to DL."""
     DA_rd = DV_rd**1.5 * rd**0.5 * H**0.5 / (c_light**0.5 * z**0.5 * (1 + z))
@@ -80,9 +74,6 @@ def bao_DM_to_DL(z, DM_rd, DM_rd_err, rd, rd_err):
     return DL, DL_err
 
 
-###############################################################################
-# 3. Gaussian Process reconstruction for BAO DL
-###############################################################################
 def fit_gp_DL(z, DL, DL_err):
     kernel = ConstantKernel(1.0, (1e-3, 1e10)) * Matern(length_scale=0.1, nu=5/2)
     gp = GaussianProcessRegressor(kernel=kernel, alpha=DL_err**2, n_restarts_optimizer=10)
@@ -90,27 +81,18 @@ def fit_gp_DL(z, DL, DL_err):
     return gp
 
 
-###############################################################################
-# 4. SN DL from mB(z) samples
-###############################################################################
 def compute_DL_SN(z_eval, mB_nodes, MB_sample, z_nodes):
     mB_eval = evaluate_mB(z_eval, mB_nodes, z_nodes)
     mu = mB_eval - MB_sample
     return 10**((mu - 25)/5)
 
 
-###############################################################################
-# 5. DDR eta(z) calculation
-###############################################################################
 def compute_eta_samples(DL_sn_samples, gp, z_eval, n_samples):
     DL_bao_samples = gp.sample_y(z_eval.reshape(-1,1), n_samples).T
     eta_samples = DL_sn_samples / DL_bao_samples
     return eta_samples
 
 
-###############################################################################
-# 6. χ² test at BAO points
-###############################################################################
 def eta_chi2(eta, cov, df=None):
     """Calculate chi2 and p-value using full covariance matrix."""
     diff = eta - 1.0
